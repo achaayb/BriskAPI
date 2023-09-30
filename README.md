@@ -6,7 +6,12 @@ GAPI framework, Gevent based API Framework with scalability in mind.
 
 #### TODO
 
-- websocket support
 - flexible response
 - better dev experience for user
 - typehinting
+- clean codebase
+
+#### TODO (future)
+
+- websocket support
+- multi instance communication
