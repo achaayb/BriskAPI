@@ -1,14 +1,15 @@
 from gapi.applications import GAPI
-from gapi.classes import Request, Response
-
+from gapi.requests import Request
+from gapi.responses import JSONResponse
+from gevent import sleep
 app = GAPI()
 
-
-@app.route("/{hello}/{haha}")
+@app.route("/{hello}", methods=["GET"])
 def hello_world(request: Request):
-    bodi = request.json
-    return Response(data=bodi)
-
+    name = request.slugs["hello"]
+    response =  JSONResponse(data=["foo"])
+    sleep(3)
+    return response
 
 @app.route("/goodbye")
 def goodbye_world(request_data):

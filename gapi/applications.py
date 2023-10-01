@@ -2,10 +2,14 @@ import json
 import re
 from pprint import pp
 from urllib.parse import parse_qs, urlparse
+import gevent
 
 from gevent.pywsgi import WSGIServer
+from gevent import sleep
+from gevent.pool import Group
 
-from gapi.classes import Request, Response
+from gapi.requests import Request
+from gapi.responses import JSONResponse
 from gapi.status import (
     HTTP_200_OK,
     HTTP_400_BAD_REQUEST,
@@ -37,12 +41,18 @@ class GAPI:
         self._routes.append((re.compile(path_re), methods, handler))
         return handler
 
-    def _match(self, request_path, method):
+    def _match(self, environ):
+        path_info = environ.get("PATH_INFO", "/")
+        # Remove trailing slash
+        if path_info.endswith("/"):
+            path_info = path_info[:-1]
+
+        request_method = environ.get("REQUEST_METHOD", "GET")
         for path, methods, handler in self._routes:
             # Skip if invalid method
-            if not method in methods:
+            if not request_method in methods:
                 continue
-            m = path.match(request_path)
+            m = path.match(path_info)
             if m is not None:
                 # Extract and return parameter values
                 path_params = m.groupdict()
@@ -78,53 +88,47 @@ class GAPI:
             request_body = b""
         return request_body
 
-    def _http_handler(self, start_response, response: Response):
+    def _http_handler(self, start_response, response: JSONResponse):
         start_response(response.status_to_str, response.headers)
         return [response.body]
 
     def __call__(self, environ, start_response):
         """__call__ magic method called by WSGIServer per request"""
 
-        # TODO: User defined response headers
-        # TODO: url params
-        # TODO: string params
-        # TODO: header params
 
-        path_info = environ.get("PATH_INFO", "/")
-        request_method = environ.get("REQUEST_METHOD", "GET")
-
-        if path_info.endswith("/"):
-            path_info = path_info[:-1]
-
-        match = self._match(path_info, request_method)
+        # Match to router and extract slugs
+        match = self._match(environ)
         if match is None:
-            response = Response(status=HTTP_404_NOT_FOUND, data="Resource not found")
+            response = JSONResponse(status=HTTP_404_NOT_FOUND, data={"message": "Resource not found"})
             return self._http_handler(start_response, response)
 
+        path_params = match["path_params"]
         handler = match["handler"]
 
-        # Prepare Request object
+        # Parse request dependencies
         headers = self._parse_headers(environ)
         query_params = self._parse_qs(environ)
         body = self._parse_body(environ)
 
+        # Prepare Request object
+        path_info = environ.get("PATH_INFO", "/")
+        request_method = environ.get("REQUEST_METHOD", "GET")
+        
         request = Request()
         request.headers = headers
         request.method = request_method
         request.path = path_info
+        request.slugs = path_params
         request.query = query_params
         request.body = body
 
         # Prepare Response
         handler_response = handler(request)
 
-        if isinstance(handler_response, Response):
+        if isinstance(handler_response, JSONResponse):
             return self._http_handler(start_response, handler_response)
-
-        error_response = Response(
-            status=HTTP_500_INTERNAL_SERVER_ERROR, data="Internal server error"
-        )
-        return self._http_handler(start_response, error_response)
+        else:
+            raise ValueError("Invalid response object")
 
     def run(self, host: str, port: int):
         pp("Starting GAPI instance")
@@ -135,5 +139,4 @@ class GAPI:
             pp("KeyboardInterrupt received. Cleaning up...")
         finally:
             pp("Graceful shutdown...")
-            server.stop()
             pp("Goodbye! ૮₍ ˶ᵔ ᵕ ᵔ˶ ₎ა")
