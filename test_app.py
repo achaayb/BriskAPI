@@ -4,11 +4,25 @@ from gapi.responses import JSONResponse
 from gevent import sleep
 app = GAPI()
 
-@app.route("/{hello}", methods=["GET"])
+@app.route("/{hello}", methods=["POST"], request_schema={
+    "type": "object",
+    "properties": {
+        "name": {"type": "string"},
+        "age": {"type": "integer"},
+    },
+    "required": ["name", "age"],
+}, response_schema={
+    "type": "object",
+    "properties": {
+        "name": {"type": "string"},
+        "age": {"type": "integer"},
+        "foo": {"type": "string"}
+    },
+    "required": ["name", "age", "foo"],
+})
 def hello_world(request: Request):
     name = request.slugs["hello"]
-    response =  JSONResponse(data=["foo"])
-    sleep(3)
+    response =  JSONResponse(data=request.json)
     return response
 
 @app.route("/goodbye")

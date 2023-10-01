@@ -23,6 +23,8 @@ class Request:
 
     @property
     def json(self) -> object:
+        if not self.body:
+            return {}
         return json.loads(self.body)
     
     @property
