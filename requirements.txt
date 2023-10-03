@@ -1,9 +1,2 @@
-attrs==23.1.0
-gevent==23.9.1
-greenlet==2.0.2
 jsonschema==4.19.1
 jsonschema-specifications==2023.7.1
-referencing==0.30.2
-rpds-py==0.10.3
-zope.event==5.0
-zope.interface==6.0

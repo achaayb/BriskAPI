@@ -1,7 +1,7 @@
 import json
 from typing import Any, List, Tuple, Union
 
-from gapi.status import (
+from hyperapi.status import (
     HTTP_200_OK,
     HTTP_400_BAD_REQUEST,
     HTTP_404_NOT_FOUND,
@@ -26,7 +26,7 @@ class Request:
         if not self.body:
             return {}
         return json.loads(self.body)
-    
+
     @property
     def dict(self) -> object:
         return {
@@ -35,5 +35,5 @@ class Request:
             "headers": self.headers,
             "query": self.query,
             "slugs": self.slugs,
-            "body": self.text
+            "body": self.text,
         }
