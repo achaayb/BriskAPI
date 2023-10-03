@@ -2,8 +2,9 @@ import re
 from pprint import pp
 from urllib.parse import parse_qs
 
-from hyperapi.requests import Request
-from hyperapi.responses import JSONResponse
+from hyperapi.request import Request
+from hyperapi.response import JSONResponse
+from hyperapi.connection import WebSocketConnection
 from hyperapi.status import (
     HTTP_200_OK,
     HTTP_400_BAD_REQUEST,
@@ -18,11 +19,11 @@ from jsonschema import Draft7Validator
 class HyperAPI:
     def __init__(self: "HyperAPI", debug: bool = True):
         self.debug = debug
-        self._routes = []
+        self._http_routes = []
+        self._ws_routes = []
 
+    # Exposed decorators
     def route(self, path, methods=["GET"], request_schema=None, response_schema=None):
-        """Decorator for adding routes to the router."""
-
         compiled_request_schema = None
         compiled_response_schema = None
 
@@ -36,7 +37,7 @@ class HyperAPI:
             compiled_response_schema = Draft7Validator(response_schema)
 
         def decorator(handler):
-            self._add_route(
+            self._add_http_route(
                 path,
                 methods,
                 handler,
@@ -47,12 +48,25 @@ class HyperAPI:
 
         return decorator
 
-    def _add_route(
+    def ws(self, path):
+        if path.endswith("/"):
+            path = path[:-1]
+
+        def decorator(handler):
+            self._add_ws_route(
+                path,
+                handler,
+            )
+            return handler
+
+        return decorator
+
+    def _add_http_route(
         self, path, methods, handler, compiled_request_schema, compiled_response_schema
     ):
         param_re = r"{([a-zA-Z_][a-zA-Z0-9_]*)}"
         path_re = r"^" + re.sub(param_re, r"(?P<\1>\\w+)", path) + r"$"
-        self._routes.append(
+        self._http_routes.append(
             (
                 re.compile(path_re),
                 methods,
@@ -63,7 +77,21 @@ class HyperAPI:
         )
         return handler
 
-    def _match(self, scope):
+    def _add_ws_route(
+        self, path, handler
+    ):
+        param_re = r"{([a-zA-Z_][a-zA-Z0-9_]*)}"
+        path_re = r"^" + re.sub(param_re, r"(?P<\1>\\w+)", path) + r"$"
+        self._ws_routes.append(
+            (
+                re.compile(path_re),
+                handler,
+            )
+        )
+        return handler
+
+    # Match path to handler + exctract slugs
+    def _match_http(self, scope):
         path_info = scope["path"]
         # Remove trailing slash
         if path_info.endswith("/"):
@@ -76,7 +104,7 @@ class HyperAPI:
             handler,
             compiled_request_schema,
             compiled_response_schema,
-        ) in self._routes:
+        ) in self._http_routes:
             # Skip if invalid method
             if not request_method in methods:
                 continue
@@ -90,7 +118,27 @@ class HyperAPI:
                     "compiled_request_schema": compiled_request_schema,
                     "compiled_response_schema": compiled_response_schema,
                 }
+            
+    def _match_ws(self, scope):
+        path_info = scope["path"]
+        # Remove trailing slash
+        if path_info.endswith("/"):
+            path_info = path_info[:-1]
 
+        for (
+            path,
+            handler,
+        ) in self._ws_routes:
+            m = path.match(path_info)
+            if m is not None:
+                # Extract and return parameter values
+                path_params = m.groupdict()
+                return {
+                    "path_params": path_params,
+                    "handler": handler,
+                }
+
+    # Parsers
     def _parse_qs(self, scope):
         query_string = scope["query_string"]
         if not query_string:
@@ -106,15 +154,8 @@ class HyperAPI:
             headers[header[0].decode("utf-8")] = header[1].decode("utf-8")
         return headers
 
-    def _parse_body(self, environ):
-        try:
-            content_length = int(environ.get("CONTENT_LENGTH", "0"))
-            request_body = environ["wsgi.input"].read(content_length)
-        except ValueError:
-            request_body = b""
-        return request_body
-
-    async def _read_body(self, receive):
+    # Body readers
+    async def _read_http_body(self, receive):
         body = bytearray()
         while True:
             msg = await receive()
@@ -160,8 +201,8 @@ class HyperAPI:
         )
 
     async def _http_handler(self, scope, receive, send):
-        # Match to router and extract slugs
-        match = self._match(scope)
+        # Match to http router and extract slugs
+        match = self._match_http(scope)
         if match is None:
             response = JSONResponse(
                 status=HTTP_404_NOT_FOUND, data={"message": "Resource not found"}
@@ -179,7 +220,7 @@ class HyperAPI:
         # Parse request dependencies
         headers = self._parse_headers(scope)
         query_params = self._parse_qs(scope)
-        body = await self._read_body(receive)
+        body = await self._read_http_body(receive)
 
         # Prepare Request object
         path_info = scope["path"]
@@ -226,10 +267,36 @@ class HyperAPI:
         # Flow success
         await self._http_response(handler_response, send)
 
+    async def _ws_handler(self, scope, receive, send):
+        # Match to ws router and extract slugs
+        match = self._match_ws(scope)
+        if match is None:
+            await send({
+                "type": "websocket.close",
+                "code": 1000
+            })
+        
+        path_params = match["path_params"]
+        handler = match["handler"]
+
+        # Parse ws connection dependencies
+        query_params = self._parse_qs(scope)
+
+        # prepare websocket connection object
+        connection = WebSocketConnection()
+        connection.receive = receive
+        connection.send = send
+        connection.path = scope["path"]
+        connection.query = query_params
+        connection.slugs = path_params
+        await handler(connection)
+
+
     async def __call__(self, scope, receive, send):
-        """__call__ magic method called by WSGIServer per request"""
 
         if scope["type"] == "http":
             await self._http_handler(scope, receive, send)
         elif scope["type"] == "lifespan":
             await self.lifespan_handler(scope, receive, send)
+        elif scope["type"] == "websocket":
+            await self._ws_handler(scope, receive, send)
