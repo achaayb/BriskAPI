@@ -2,10 +2,10 @@ import re
 from pprint import pp
 from urllib.parse import parse_qs
 
-from hyperapi.request import Request
-from hyperapi.response import JSONResponse
-from hyperapi.connection import WebSocketConnection
-from hyperapi.status import (
+from briskapi.request import Request
+from briskapi.response import JSONResponse
+from briskapi.connection import WebSocketConnection
+from briskapi.status import (
     HTTP_200_OK,
     HTTP_400_BAD_REQUEST,
     HTTP_404_NOT_FOUND,
@@ -16,8 +16,8 @@ from hyperapi.status import (
 from jsonschema import Draft7Validator
 
 
-class HyperAPI:
-    def __init__(self: "HyperAPI", debug: bool = True):
+class BriskAPI:
+    def __init__(self: "BriskAPI", debug: bool = True):
         self.debug = debug
         self._http_routes = []
         self._ws_routes = []

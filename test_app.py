@@ -1,9 +1,9 @@
-from hyperapi.applications import HyperAPI
-from hyperapi.request import Request
-from hyperapi.response import JSONResponse
-from hyperapi.connection import WebSocketConnection
-from hyperapi.status import HTTP_202_ACCEPTED
-app = HyperAPI()
+from briskapi.applications import BriskAPI
+from briskapi.request import Request
+from briskapi.response import JSONResponse
+from briskapi.connection import WebSocketConnection
+from briskapi.status import HTTP_202_ACCEPTED
+app = BriskAPI()
 
 
 @app.route(

@@ -1,4 +1,4 @@
-from hyperapi.status import (
+from briskapi.status import (
     HTTP_200_OK,
     HTTP_400_BAD_REQUEST,
     HTTP_404_NOT_FOUND,
