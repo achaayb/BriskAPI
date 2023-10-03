@@ -13,9 +13,9 @@ HyperAPI is a high-performance lightweight framework for building API's in pytho
 
 features:
 - elegant routing
-- builtin jsonschema validation
+- jsonschema validation
 - high performance
-- minimal codebase
+- websocket support
 
 example:
 > app.py
